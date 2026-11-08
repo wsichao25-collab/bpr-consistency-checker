@@ -1,0 +1,137 @@
+meta:
+  name: gmp_record_consistency
+  version: "2.0"
+  说明: 规则即配置——新增检查项只需在 rules 中追加，无需改代码
+
+datetime_format: "%Y-%m-%d %H:%M"
+
+files:
+  batch_steps.csv:
+    required_cols: [doc_no, batch_id, step, step_name, equipment_id, operator, start_time, end_time]
+  batch_materials.csv:
+    required_cols: [doc_no, batch_id, step, material, lot_no, initial_kg, final_kg, net_kg, theoretical_range, metrology_id]
+  batch_params.csv:
+    required_cols: [doc_no, batch_id, step, param_name, value, expected_range]
+  batch_specs.csv:
+    required_cols: [doc_no, item, specified_value]
+  equipment_clean.csv:
+    required_cols: [equipment_id, clean_end_time, valid_days]
+
+batch_mapping:
+  BPR-204-193-01: INT-000
+  BPR-204-193-02: INT-001
+  BPR-204-193-03: FP-001
+
+rules:
+  # ---- 结构/格式类（batch_steps.csv）----
+  - id: R001
+    file: batch_steps.csv
+    column: doc_no
+    type: enum
+    severity: 格式
+    values: [BPR-204-193-01, BPR-204-193-02, BPR-204-193-03]
+    message: "doc_no 必须为文件编号枚举"
+  - id: R004
+    file: batch_steps.csv
+    column: operator
+    type: enum
+    severity: 格式
+    values: [OP-01, OP-02, QA-01]
+    message: "操作者必须为脱敏编号"
+  - id: R003
+    file: batch_steps.csv
+    column: equipment_id
+    type: regex
+    severity: 格式
+    pattern: '^(EQ-(0[1-9]|1[0-6])|MET-[0-9]{2}|NA)$'
+    message: "设备编号 EQ-xx / 计量编号 MET-xx / NA"
+  - id: R005
+    file: batch_steps.csv
+    column: step
+    type: regex
+    severity: 格式
+    pattern: '^[0-9]+(\.[0-9]+){0,2}(-[0-9]+)?$'
+    message: "step 格式如 1.2 / 1.3.2 / 1.8.5-1"
+  - id: R006
+    file: batch_steps.csv
+    column: start_time
+    type: datetime
+    severity: 格式
+    message: "开始时间格式 YYYY-MM-DD HH:MM"
+  - id: R007
+    file: batch_steps.csv
+    column: end_time
+    type: datetime
+    severity: 格式
+    message: "结束时间格式 YYYY-MM-DD HH:MM"
+  # ---- 逻辑类（batch_steps.csv）----
+  - id: R008
+    file: batch_steps.csv
+    type: cross_field
+    left: end_time
+    operator: ">="
+    right: start_time
+    severity: 逻辑
+    message: "end_time 必须大于或等于 start_time"
+  - id: R009
+    file: batch_steps.csv
+    type: cross_field
+    left: batch_id
+    operator: equals_batch_mapping_of
+    right: doc_no
+    severity: 逻辑
+    message: "doc_no 与 batch_id 必须匹配"
+  - id: R010
+    file: batch_steps.csv
+    type: no_overlap
+    severity: 偏差
+    partition_by: [batch_id, equipment_id]
+    start: start_time
+    end: end_time
+    message: "同一设备时间段不得重叠"
+  - id: R011
+    file: batch_steps.csv
+    type: no_overlap
+    severity: 偏差
+    partition_by: [operator]
+    start: start_time
+    end: end_time
+    message: "同一人员不得同时操作两个工序（双岗）"
+  - id: R012
+    file: batch_steps.csv
+    type: continuous_work
+    severity: 偏差
+    group_by: operator
+    threshold_hours: 8
+    merge_gap_minutes: 30
+    message: "连续工作时间超过 8 小时，无轮班/休息"
+  - id: R017
+    file: batch_steps.csv
+    type: step_sequence
+    severity: 偏差
+    message: "工序顺序与时间轴矛盾"
+  # ---- 称量类（batch_materials.csv）----
+  - id: R013
+    file: batch_materials.csv
+    type: net_weight
+    severity: 偏差
+    tolerance: 0.05
+    message: "净重 ≠ 初始重量 - 结束重量"
+  # ---- 参数类（batch_params.csv）----
+  - id: R014
+    file: batch_params.csv
+    type: value_range
+    severity: 偏差
+    message: "工艺参数超出规定范围"
+  # ---- 清洗类（equipment_clean.csv 关联 batch_steps.csv）----
+  - id: R015
+    file: batch_steps.csv
+    type: cleaning_validity
+    severity: 偏差
+    message: "设备超出清洗有效期使用（7天）"
+  # ---- 文件一致性（batch_specs.csv）----
+  - id: R016
+    file: batch_specs.csv
+    type: spec_consistency
+    severity: 严重
+    message: "受控文件间规格不一致"
