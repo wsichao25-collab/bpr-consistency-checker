@@ -72,4 +72,5 @@ MOONSHOT_API_KEY=sk-...        # Kimi（默认，模型 kimi-k3）
 
 MIT（数据与条款文本仅作演示用途）
 ## 演示 Demo
-![核查报告](GMP 批记录核查报告.png)
+![核查报告]<img width="1848" height="1851" alt="GMP 批记录核查报告" src="https://github.com/user-attachments/assets/72b8fb7d-f384-4912-8ba4-40fc26dc2338" />
+
